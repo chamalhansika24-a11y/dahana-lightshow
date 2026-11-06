@@ -9,6 +9,8 @@
         button { padding: 15px 30px; font-size: 20px; background-color: #28a745; color: white; border: none; cursor: pointer; border-radius: 5px; }
         #status { margin-top: 20px; font-size: 18px; color: #ffc107; }
         #beatIndicator { width: 100px; height: 100px; background-color: gray; border-radius: 50%; margin: 30px auto; }
+        .slider-container { margin-top: 30px; }
+        input[type="range"] { width: 300px; }
     </style>
 </head>
 <body>
@@ -17,7 +19,13 @@
     <button id="startBtn">Start Audio Input</button>
     <div id="status">Waiting to start...</div>
     
-    <!-- බීට් එක වදිද්දි මේ රවුම පත්තු වෙනවා -->
+    <!-- සංවේදීතාව පාලනය කරන Slider එක -->
+    <div class="slider-container">
+        <label for="sensitivity">Trigger Threshold: <span id="sensValue">150</span></label><br><br>
+        <input type="range" id="sensitivity" min="50" max="250" value="150">
+        <p style="font-size: 14px; color: #aaa;">(අගය අඩු කළ තරමට පොඩි සද්දෙටත් වැඩ කරනවා)</p>
+    </div>
+
     <div id="beatIndicator"></div>
 
     <script>
@@ -25,27 +33,30 @@
         let audioContext, analyser, microphone, dataArray;
         let isCooldown = false;
 
+        // Slider එකේ අගය ගන්නවා
+        const slider = document.getElementById('sensitivity');
+        const sensValue = document.getElementById('sensValue');
+        
+        slider.addEventListener('input', function() {
+            sensValue.innerText = this.value;
+        });
+
         document.getElementById('startBtn').addEventListener('click', async () => {
             document.getElementById('status').innerText = "Requesting Audio Access...";
-            
             try {
-                // ලැප්ටොප් එකේ මයික් එක හෝ Line-in එකට ඇක්සස් ගන්නවා
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 microphone = audioContext.createMediaStreamSource(stream);
                 
                 microphone.connect(analyser);
-                analyser.fftSize = 256; // Frequency දත්ත ගන්න කොටස් ගාණ
+                analyser.fftSize = 256; 
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
 
                 document.getElementById('status').innerText = "Listening to Audio... 🎧";
                 document.getElementById('startBtn').style.display = 'none';
 
-                // බීට් එක අඳුරගන්න ෆන්ක්ෂන් එක පටන් ගන්නවා
                 detectBeat();
-
             } catch (err) {
                 document.getElementById('status').innerText = "Error: " + err.message;
             }
@@ -54,31 +65,25 @@
         function detectBeat() {
             analyser.getByteFrequencyData(dataArray);
             
-            // Bass ශබ්ද තියෙන්නේ Array එකේ මුල් කොටසේ (Low frequencies)
             let bassSum = 0;
             for(let i = 0; i < 5; i++) {
                 bassSum += dataArray[i];
             }
             let bassAvg = bassSum / 5;
 
-            // සීමාව (Threshold): 255 න් 220 ට වඩා සද්දේ වැඩි නම් (මේ ගාණ ඔයාට වෙනස් කරන්න පුළුවන්)
-            if (bassAvg > 220 && !isCooldown) {
-                
-                // සර්වර් එකට සිග්නල් එක යවනවා
-                socket.emit('admin_beat_detected', { timestamp: Date.now() });
+            // Slider එකෙන් දෙන අගය (Threshold එක) මෙතනට ගන්නවා
+            let currentThreshold = parseInt(slider.value);
 
-                // UI එකේ රවුම සුදු කරනවා
+            if (bassAvg > currentThreshold && !isCooldown) {
+                socket.emit('admin_beat_detected', { timestamp: Date.now() });
                 document.getElementById('beatIndicator').style.backgroundColor = 'white';
                 
-                // එක සද්දෙට පාරවල් ගොඩක් සිග්නල් යන එක නවත්තන්න Cooldown එකක් දානවා (මිලි තත්පර 300)
                 isCooldown = true;
                 setTimeout(() => {
                     isCooldown = false;
                     document.getElementById('beatIndicator').style.backgroundColor = 'gray';
                 }, 300);
             }
-
-            // මේක හැමවෙලේම රිපීට් වෙනවා
             requestAnimationFrame(detectBeat);
         }
     </script>
