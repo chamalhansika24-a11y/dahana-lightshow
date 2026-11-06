@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Light Show!</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* මුලින්ම ස්ක්‍රීන් එක කළු පාටයි */
+        body { font-family: Arial; background-color: black; color: white; text-align: center; padding-top: 100px; transition: background-color 0.1s; margin: 0; height: 100vh; }
+        button { padding: 20px 40px; font-size: 22px; background-color: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
+        #status { margin-top: 20px; font-size: 18px; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <h1 id="mainText">Ready for the Show? 🎵</h1>
+    <p>Please turn your brightness to MAX!</p>
+    
+    <!-- ෆ්ලෑෂ් ලයිට් එකට අවසර ගන්න Button එක -->
+    <button id="enableFlashBtn">Enable Flashlight 🔦</button>
+    <div id="status">Waiting to join...</div>
+
+    <script>
+        const socket = io();
+        let videoTrack = null; // කැමරා ෆ්ලෑෂ් එක කන්ට්‍රෝල් කරන විචල්‍යය
+
+        // Button එක ක්ලික් කරාම කැමරාවට අවසර ඉල්ලනවා
+        document.getElementById('enableFlashBtn').addEventListener('click', async () => {
+            try {
+                document.getElementById('status').innerText = "Requesting Camera Access...";
+                
+                // ෆෝන් එකේ පිටිපස්සේ කැමරාව (environment) ඉල්ලනවා
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" } 
+                });
+                
+                // කැමරාවේ Track එක අරගන්නවා
+                videoTrack = stream.getVideoTracks()[0];
+                
+                // ෆ්ලෑෂ් එක (Torch) සපෝට් කරනවද කියලා බලනවා
+                const capabilities = videoTrack.getCapabilities();
+                if (capabilities.torch) {
+                    document.getElementById('status').innerText = "Flashlight Ready! 🚀";
+                    document.getElementById('enableFlashBtn').style.display = 'none';
+                } else {
+                    document.getElementById('status').innerText = "Flashlight not supported on this browser. Using Screen mode.";
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "Camera access denied. Using Screen mode.";
+            }
+        });
+
+        // සර්වර් එකෙන් (Admin ගෙන්) සිග්නල් එක ආවම වැඩ කරන කොටස
+        socket.on('flash_screen', async (data) => {
+            
+            // 1. ස්ක්‍රීන් එක සුදු පාට කරනවා (සැමටම වැඩ)
+            document.body.style.backgroundColor = 'white';
+            document.getElementById('mainText').style.color = 'black';
+
+            // 2. ෆ්ලෑෂ් ලයිට් එක පත්තු කරනවා (සපෝට් කරන අයට විතරක්)
+            if (videoTrack) {
+                try {
+                    await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
+                } catch (e) {
+                    console.log("Torch error:", e);
+                }
+            }
+
+            // මිලි තත්පර 150 කින් පස්සේ ආපහු ලයිට් එකයි ස්ක්‍රීන් එකයි නිවනවා
+            setTimeout(async () => {
+                document.body.style.backgroundColor = 'black';
+                document.getElementById('mainText').style.color = 'white';
+                
+                if (videoTrack) {
+                    try {
+                        await videoTrack.applyConstraints({ advanced: [{ torch: false }] });
+                    } catch (e) {
+                        console.log("Torch off error:", e);
+                    }
+                }
+            }, 150);
+        });
+
+    </script>
+</body>
+</html>
